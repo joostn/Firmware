@@ -439,6 +439,7 @@ void LaosMotion::home(int x, int y, int z)
     led4 = ((i++) & 0x10000);
     if ( !(xhome ^ cfg->xpol) && !(yhome ^ cfg->ypol) )
     {
+      ofsx = ofsy = ofsz = 0;  //reset offset when homing
       setPosition(x,y,z);
       moveTo(x,y,z);
       isHome = true;
