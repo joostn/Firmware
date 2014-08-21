@@ -138,8 +138,6 @@ static  const char *ipfields[] = { "IP", "NETMASK", "GATEWAY", "DNS" };
 LaosMenu::LaosMenu(LaosDisplay *display) {
     waitup=timeout=iofield=ipfield=0;
     sarg = NULL;
-    x=y=z=0;
-    xoff=yoff=zoff=0;
     screen=prevscreen=lastscreen=speed=0;
     menu=1;
     strcpy(jobname, "");
@@ -277,7 +275,7 @@ void LaosMenu::Handle() {
             case MOVE: // pos xy
                 {
                     int x,y,z;
-                    mot->getPosition(&x, &y, &z);
+                    mot->getCurrentPositionRelativeToOrigin(&x, &y, &z);
                     int xt = x;
                     int yt= y;
                     switch ( c ) {
@@ -291,7 +289,7 @@ void LaosMenu::Handle() {
                         case K_ORIGIN: screen=ORIGIN; break;
                     }
                     if  ((mot->queue() < 5) && ( (x!=xt) || (y != yt) )) {
-                        mot->moveTo(x, y, z, speed/2);
+                        mot->moveToRelativeToOrigin(x, y, z, speed/2);
     					printf("Move: %d %d %d %d\n", x,y,z, speed);
                     } else {
                         // if (! mot->ready()) 
@@ -306,7 +304,7 @@ void LaosMenu::Handle() {
                 {
 
                     int x,y,z;
-                    mot->getPosition(&x, &y, &z);
+                    mot->getCurrentPositionRelativeToOrigin(&x, &y, &z);
                     int zt = z;
                     switch ( c ) {
                         case K_FUP: z+=cfg->zspeed*speed; if (z>cfg->zmax) z=cfg->zmax; break;
@@ -322,7 +320,7 @@ void LaosMenu::Handle() {
                     }
                     if ( mot->ready() && (z!=zt) ) 
     				{
-                      mot->moveTo(x, y, z, speed);
+                      mot->moveToRelativeToOrigin(x, y, z, speed);
     				  printf("Move: %d %d %d %d\n", x,y,z, speed);
     				}
                     args[0]=z;
@@ -417,8 +415,6 @@ void LaosMenu::Handle() {
                 break;
 */
             case HOMING: // Homing screen
-                x = cfg->xhome;
-                y = cfg->yhome;
                 while ( !mot->isStart() );
                 mot->home(cfg->xhome,cfg->yhome,cfg->zhome);
                 screen=lastscreen;
@@ -451,7 +447,7 @@ void LaosMenu::Handle() {
                             if (feof(runfile) && mot->ready()) {
                                 fclose(runfile);
                                 runfile = NULL;
-                                mot->moveTo(cfg->xrest, cfg->yrest, cfg->zrest);
+                                mot->moveToAbsolute(cfg->xrest, cfg->yrest, cfg->zrest);
                                 screen=MAIN;
                             } else {
                                 nodisplay = 1;
@@ -480,7 +476,7 @@ void LaosMenu::Handle() {
                             runfile = NULL;
                             int minx, miny, maxx, maxy;
                             LaosExtent::TError err=m_Extent.GetBoundary(minx, miny, maxx, maxy);
-                            if(false) //if(err)
+                            if(err)
                             {
                                 // todo: display error text
                                 screen=MAIN;
