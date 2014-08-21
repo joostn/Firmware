@@ -445,8 +445,12 @@ void LaosMotion::setOriginAbsolute(int x, int y, int z)
 
 void LaosMotion::MakeCurrentPositionOrigin()
 {
+  extern GlobalConfig *cfg;
   int x,y,z;
   getCurrentPositionAbsolute(&x, &y, &z);
+  x -= cfg->xhome;
+  y -= cfg->yhome;
+  z -= cfg->zhome;
   setOriginAbsolute(x, y, z);
 }
 
