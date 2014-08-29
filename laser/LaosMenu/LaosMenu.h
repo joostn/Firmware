@@ -33,6 +33,7 @@
 #include "global.h"
 #include "LaosMotion.h"
 #include "LaosExtent.h"
+#include "planner.h"
 
 extern "C" void mbed_reset();
 
@@ -85,6 +86,8 @@ private:
   LaosExtent m_Extent; // extent calculator
   int m_StageAfterAnalyzing;
   int m_SubStage;
+  bool m_MoveWaitTillQueueEmpty;
+  int m_PrevKey;
 };
 
  

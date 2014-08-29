@@ -154,6 +154,8 @@ LaosMenu::LaosMenu(LaosDisplay *display) {
     dsp->cls();
     SetScreen("");
     runfile = NULL;
+    m_MoveWaitTillQueueEmpty = true;
+    m_PrevKey = 0;
 }
 
 /**
@@ -225,11 +227,27 @@ void LaosMenu::Handle() {
         c = 0;                 // cancel the keypress
     if ( waitup && !timeout ) waitup=0;
     
-    if ( !timeout )  // increase speed if we keep button pressed longer
+    if ( !timeout )
+    {
+        // joystick has been released. Set speed to low again:
         speed = 3;
+    }
     else {
-        speed = speed * 2;
-        if ( speed >= 100 ) speed = 100;
+          // increase speed if we keep button pressed longer
+//        speed = speed * 2;
+//        if ( speed >= 100 ) speed = 100;
+    }
+
+    if( (c != 0) || (timeout == 0))
+    {
+        if(m_PrevKey != c)
+        {
+            // and when starting a new move, wait till the previous movements are completely finished.
+            // This is needed, otherwise back-and-forth moves could result in a far move being
+            // done at a low speed, which would take a long time to finish:
+            m_MoveWaitTillQueueEmpty = true;        
+        }
+        m_PrevKey = c;
     }
 
     if ( c || screen != prevscreen || count >9 ) {
@@ -283,25 +301,39 @@ void LaosMenu::Handle() {
             case MOVE: // pos xy
                 {
                     int x,y,z;
-                    mot->getCurrentPositionRelativeToOrigin(&x, &y, &z);
+                    mot->getPlannedPositionRelativeToOrigin(&x, &y, &z);
                     int xt = x;
                     int yt= y;
                     switch ( c ) {
-                        case K_DOWN: y-=100*speed; break;
-                        case K_UP: y+=100*speed;  break;
-                        case K_LEFT: x-=100*speed; break;
-                        case K_RIGHT: x+=100*speed;  break;
+                        case K_DOWN: y-=20*speed; break;
+                        case K_UP: y+=20*speed;  break;
+                        case K_LEFT: x-=20*speed; break;
+                        case K_RIGHT: x+=20*speed;  break;
                         case K_OK: case K_CANCEL: screen=MAIN; waitup=1; break;
                         case K_FUP: screen=FOCUS; break; 
                         case K_FDOWN: screen=FOCUS; break;
                         case K_ORIGIN: screen=ORIGIN; break;
                     }
-                    if  ((mot->queue() < 5) && ( (x!=xt) || (y != yt) )) {
-                        mot->moveToRelativeToOrigin(x, y, z, speed/2);
-    					printf("Move: %d %d %d %d\n", x,y,z, speed);
-                    } else {
-                        // if (! mot->ready()) 
-                        // printf("Buffer vol\n");
+                    if(screen != MOVE)
+                    {
+                        // plan_set_acceleration_manager_enabled(true);
+                    }
+                    // if the queue is empty, we can start moving now
+                    // If there are 7 or fewer moves in the queue then we can add another move only if !m_MoveWaitTillQueueEmpty
+                    int numinqueue = mot->queue();
+                    printf("Move: c: %d, numinqueue: %d, xt: %d, yt: %d,  waitempty: %d\n", 
+                        c, numinqueue, xt, yt, m_MoveWaitTillQueueEmpty? 1:0);
+                    if( (numinqueue == 0) || ((!m_MoveWaitTillQueueEmpty) && (numinqueue < 4)) )
+                    {
+                        m_MoveWaitTillQueueEmpty = false;
+                        if( (x!=xt) || (y != yt) )
+                        {
+                            // plan_set_acceleration_manager_enabled(false);
+                            mot->moveToRelativeToOrigin(x, y, z, speed/2);
+                            printf("Move to: %d %d %d %d\n", x,y,z, speed);
+                            speed = speed * 2;
+                            if ( speed >= 100 ) speed = 100;
+                        }
                     }
                     args[0]=x;
                     args[1]=y;
