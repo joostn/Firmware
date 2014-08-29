@@ -85,6 +85,8 @@ private:
   LaosExtent m_Extent; // extent calculator
   int m_StageAfterAnalyzing;
   int m_SubStage;
+  int m_PrevKey;
+  bool m_MoveWaitTillQueueEmpty;
 };
 
  

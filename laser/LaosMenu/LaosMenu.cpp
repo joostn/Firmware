@@ -232,6 +232,19 @@ void LaosMenu::Handle() {
         if ( speed >= 100 ) speed = 100;
     }
 
+
+    if( (c != 0) || (timeout == 0))
+    {
+        if(m_PrevKey != c)
+        {
+            // and when starting a new move, wait till the previous movements are completely finished.
+            // This is needed, otherwise back-and-forth moves could result in a far move being
+            // done at a low speed, which would take a long time to finish:
+            m_MoveWaitTillQueueEmpty = true;        
+        }
+        m_PrevKey = c;
+    }
+
     if ( c || screen != prevscreen || count >9 ) {
 
         switch ( screen ) {
@@ -296,7 +309,9 @@ void LaosMenu::Handle() {
                         case K_FDOWN: screen=FOCUS; break;
                         case K_ORIGIN: screen=ORIGIN; break;
                     }
-                    if  ((mot->queue() < 5) && ( (x!=xt) || (y != yt) )) {
+                    int maxinqueue=m_MoveWaitTillQueueEmpty? 1:5;
+                    if  ((mot->queue() < maxinqueue) && ( (x!=xt) || (y != yt) )) {
+                        m_MoveWaitTillQueueEmpty=false;
                         mot->moveToRelativeToOrigin(x, y, z, speed/2);
     					printf("Move: %d %d %d %d\n", x,y,z, speed);
                     } else {
