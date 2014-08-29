@@ -28,7 +28,7 @@
 #include  "pins.h"
 
 // #define DO_MOTION_TEST 1
-//#define READ_FILE_DEBUG_VERBOSE
+#define READ_FILE_DEBUG_VERBOSE
  
 // globals
 unsigned int step=0;
@@ -265,6 +265,9 @@ void LaosMotion::write(int i)
                 int dummy1, dummy2, plannedz;
                 getPlannedPositionRelativeToOrigin(&dummy1, &dummy2, &plannedz); // get the planned z coordinatre
                 moveToRelativeToOriginWithAbsoluteFeedrate(commandx, commandy, plannedz, feedrate, power, actiontype);
+  #ifdef READ_FILE_DEBUG_VERBOSE
+    printf("moveto (%d, %d, feedrate: %d, power: %d)\n",commandx, commandy,feedrate,power);
+#endif
                 if ( actiontype == AT_BITMAP )
                 {
                   while ( queue() );// printf("-"); // wait for queue to empty
