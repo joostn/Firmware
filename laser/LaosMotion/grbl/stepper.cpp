@@ -65,6 +65,7 @@ static Timeout exhaust_timer; // air assist/exhaust turn off delay
 static tFixedPt pwmofs; // the offset of the PWM value
 static tFixedPt pwmscale; // the scaling of the PWM value
 static volatile int running = 0;  // stepper irq is running
+static uint32_t s_CurrentTimerPeriod = 2000;
 
 static uint32_t direction_inv;    // invert mask for direction bits
 static uint32_t direction_bits;   // all axes direction (different ports)
@@ -190,6 +191,7 @@ void st_wake_up()
   if ( ! running )
   {
     running = 1;
+    s_CurrentTimerPeriod = 0; // force an update in set_step_timer
     set_step_timer(2000);
     exhaust = 1; // turn air assist/exhaust on
     exhaust_timer.detach(); // cancel any pending timer
@@ -278,14 +280,18 @@ static inline void set_step_timer (uint32_t cycles)
 {
    extern GlobalConfig *cfg;
    volatile static double p;
-   timer.attach_us(&st_interrupt,cycles);
+   if(s_CurrentTimerPeriod != cycles)
+   {
+     s_CurrentTimerPeriod = cycles;
+     timer.attach_us(&st_interrupt,cycles);
    // p = to_double(pwmofs + mul_f( pwmscale, ((power>>6) * c_min) / ((10000>>6)*cycles) ) );
    // p = ( to_double(c_min) * current_block->power) / ( 10000.0 * (double)cycles);
   // p = (60E6/nominal_rate) / cycles; // nom_rate is steps/minute,
    //printf("%f,%f,%f\n\r", (float)(60E6/nominal_rate), (float)cycles, (float)p);
   // printf("%d: %f %f\n\r", (int)current_block->power, (float)p, (float)c_min/(float(c) ));
-   p = (double)(cfg->pwmmin/100.0 + ((current_block->power/10000.0)*((cfg->pwmmax - cfg->pwmmin)/100.0)));
-   pwm = p;
+     p = (double)(cfg->pwmmin/100.0 + ((current_block->power/10000.0)*((cfg->pwmmax - cfg->pwmmin)/100.0)));
+     pwm = p;
+   }
 }
 
 // "The Stepper Driver Interrupt" - This timer interrupt is the workhorse of Grbl. It is  executed at the rate set with
@@ -422,10 +428,7 @@ static  void st_interrupt (void)
               ramp = RAMP_MAX;
             }
 
-            if (to_int(new_c) != to_int(c))
-            {
-              set_step_timer (to_int(new_c));
-            }
+            set_step_timer (to_int(new_c));
             c = new_c;
           }
           break;
@@ -440,10 +443,7 @@ static  void st_interrupt (void)
 
           case RAMP_DOWN:
             new_c = c - (c<<1) / (4*n+1);
-            if (to_int(new_c) != to_int(c))
-            {
-              set_step_timer (to_int(c));
-            }
+            set_step_timer (to_int(new_c));
             c = new_c;
           break;
         }
