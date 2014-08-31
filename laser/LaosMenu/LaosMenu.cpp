@@ -21,6 +21,7 @@
  *
  */
 #include "LaosMenu.h"
+#include "stepper.h"
 
 static const char *menus[] = {
     "STARTUP",     //0
@@ -296,6 +297,7 @@ void LaosMenu::Handle() {
             case MOVE: // pos xy
                 {
                     int x,y,z;
+                    int numinqueue=mot->queue();
                     mot->getCurrentPositionRelativeToOrigin(&x, &y, &z);
                     int xt = x;
                     int yt= y;
@@ -305,12 +307,19 @@ void LaosMenu::Handle() {
                         case K_LEFT: x-=100*speed; break;
                         case K_RIGHT: x+=100*speed;  break;
                         case K_OK: case K_CANCEL: screen=MAIN; waitup=1; break;
-                        case K_FUP: screen=FOCUS; break; 
+//                        case K_FUP: screen=FOCUS; break; 
+                        case K_FUP:
+                            // use the Focus Up button to display debugging data for the stepper interrupt:
+                            st_debug();
+                            screen=FOCUS; 
+                            break;
                         case K_FDOWN: screen=FOCUS; break;
                         case K_ORIGIN: screen=ORIGIN; break;
                     }
+                    printf("Move: c: %d, numinqueue: %d, xt: %d, yt: %d,  waitempty: %d\n", 
+                        c, numinqueue, xt, yt, m_MoveWaitTillQueueEmpty? 1:0);
                     int maxinqueue=m_MoveWaitTillQueueEmpty? 1:5;
-                    if  ((mot->queue() < maxinqueue) && ( (x!=xt) || (y != yt) )) {
+                    if  ((numinqueue < maxinqueue) && ( (x!=xt) || (y != yt) )) {
                         m_MoveWaitTillQueueEmpty=false;
                         mot->moveToRelativeToOrigin(x, y, z, speed/2);
     					printf("Move: %d %d %d %d\n", x,y,z, speed);
