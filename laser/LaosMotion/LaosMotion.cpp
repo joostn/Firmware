@@ -28,7 +28,7 @@
 #include  "pins.h"
 
 // #define DO_MOTION_TEST 1
-#define READ_FILE_DEBUG_VERBOSE
+// #define READ_FILE_DEBUG_VERBOSE
  
 // globals
 unsigned int step=0;
