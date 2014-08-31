@@ -39,7 +39,7 @@ config_t config;
 #define lround(x) ( (long)floor(x+0.5) )
 
 // The number of linear motions that can be in the plan at any give time
-#define BLOCK_BUFFER_SIZE 25
+#define BLOCK_BUFFER_SIZE 16
 tTarget startpoint;
 
 static block_t block_buffer[BLOCK_BUFFER_SIZE];  // A ring buffer for motion instructions
