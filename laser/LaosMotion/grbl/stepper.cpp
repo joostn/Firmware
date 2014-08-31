@@ -480,3 +480,31 @@ void exhaust_off()
     exhaust = 0;
     exhaust_timer.detach();
 }
+
+// print debugging data for a block
+void st_debug_block(const block_t *block)
+{
+  printf("step_event_count: %lu, nominal_rate: %lu, nominal_speed: %f, entry_speed: %f, max_entry_speed: %f, millimeters: %f"
+    ", initial_rate: %lu, final_rate: %lu, rate_delta: %lu, accelerate_until: %lu, decelerate_after: %lu\n",
+      block->step_event_count, block->nominal_rate, block->nominal_speed, block->entry_speed, block->max_entry_speed, block->millimeters
+      , block->initial_rate, block->final_rate, block->rate_delta, block->accelerate_until, block->decelerate_after
+    );
+}
+
+// print debugging data for the state of the stepper
+void st_debug()
+{
+  printf("running: %d, step_events_completed: %lu, c: %f, c_min: %f, n: %d, decel_n: %d, ramp: %d\n",
+    running, step_events_completed, to_double(c), to_double(c_min), n, decel_n, (int)ramp);
+  const block_t *blk=current_block;
+  if(blk)
+  {
+    st_debug_block(blk);
+  }
+  else
+  {
+    printf("No current block\n");
+  }
+}
+
+
