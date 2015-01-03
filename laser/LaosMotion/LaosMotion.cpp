@@ -24,17 +24,23 @@
  */
 #include "global.h"
 #include "LaosMotion.h"
+#include  "planner.h"
 #include  "stepper.h"
 #include  "pins.h"
 
 // #define DO_MOTION_TEST 1
-// #define READ_FILE_DEBUG_VERBOSE
- 
+
 // globals
 unsigned int step=0;
 int command=0;
 int mark_speed = 100; // 100 [mm/sec]
+int bitmap_speed = 100; // 100 [mm/sec]
 int power = 10000 ;
+// next planner action to enqueue
+tActionRequest  action;
+
+// position offsets
+static int ofsx=0, ofsy=0, ofsz=0;
 
 // Command interpreter
 int param=0, val=0;
@@ -74,6 +80,10 @@ LaosMotion::LaosMotion()
   st_init();
   reset();
   mark_speed = cfg->speed;
+  bitmap_speed = cfg->xspeed;
+  action.param = 0;
+  action.target.x = action.target.y = action.target.z = action.target.e =0;
+  action.target.feed_rate = 60*mark_speed;
 
 #if DO_MOTION_TEST
   t.start();
@@ -94,6 +104,7 @@ LaosMotion::LaosMotion()
       printf("%d PONG...\n", t.read_ms());
     if ( i > 1 || i<0) i = 0;
     plan_buffer_line (&act[i]);
+    UpdatePlannedCoordinates(&action);
     led1 = 0;
   }
 #endif
@@ -190,40 +201,41 @@ void LaosMotion::moveToAbsoluteWithAbsoluteFeedrate(int x, int y, int z, int fee
   action.target.feed_rate =  feedrate;
   action.param = power;
   plan_buffer_line(&action);
-  m_PlannedXAbsolute = x;
-  m_PlannedYAbsolute = y;
-  m_PlannedZAbsolute = z;
+  UpdatePlannedCoordinates(&action);
    //printf("To buffer: %d, %d, %d, %d\n", x, y,z,speed);
+}
+
+void LaosMotion::UpdatePlannedCoordinates(const tActionRequest *action)
+{
+  m_PlannedXAbsolute = action->target.x * 1000.0;
+  m_PlannedYAbsolute = action->target.y * 1000.0;
+  m_PlannedZAbsolute = action->target.z * 1000.0;
 }
 
 /**
 *** write()
 *** Write command and parameters to motion controller
 *** Parse all the integers found in the simplecode file per integer
-*** All moves and coordinates are treated as coordinates relative to the set origin
 **/
 void LaosMotion::write(int i)
 {
   extern GlobalConfig *cfg;
-  static int commandx=0,commandy=0,commandz=0;
+  static int x=0,y=0,z=0;
   //if (  plan_queue_empty() )
   //printf("Empty\n");
   
   
+  #ifdef READ_FILE_DEBUG_VERBOSE
+    printf(">%i (command: %i, step: %i)\n",i,command,step);
+  #endif 
   
   if ( step == 0 )
   {
     command = i;
-  #ifdef READ_FILE_DEBUG_VERBOSE
-    printf(">%i (command: %i, step: %i)\n",i,command,step);
-  #endif  
     step++;
   }
   else
   {
-  #ifdef READ_FILE_DEBUG_VERBOSE
-    printf(">%i (command: %i, step: %i)\n",i,command,step);
-  #endif  
      switch( command )
      {
           case 0: // move x,y (laser off)
@@ -231,48 +243,40 @@ void LaosMotion::write(int i)
             switch ( step )
             {
               case 1:
-                commandx = i;
+                action.target.x = (i-ofsx)/1000.0;
                 break;
               case 2:
-                commandy = i;
+                action.target.y = (i-ofsy)/1000.0;;
                 step=0;
-                int feedrate;
-                eActionType actiontype;
-                if(command == 1)
+                action.target.z = 0;
+                action.param = power;
+                action.ActionType =  (command ? AT_LASER : AT_MOVE);
+                if ( bitmap_enable && (action.ActionType == AT_LASER))
                 {
-                  if(bitmap_enable)
-                  {
-                    actiontype = AT_BITMAP;
-                    bitmap_enable = 0;
-                    feedrate = 60 * cfg->xspeed;
-                  }
-                  else
-                  {
-                    actiontype = AT_LASER;
-                    feedrate = 60 * mark_speed;
-                  }
+                  action.ActionType = AT_BITMAP;
+                  bitmap_enable = 0;
                 }
-                else
+                switch ( action.ActionType )
                 {
-                  actiontype = AT_MOVE;
-                  feedrate = 60 * cfg->speed;
+                  case AT_MOVE: action.target.feed_rate = 60 * cfg->speed; break;
+                  case AT_LASER: action.target.feed_rate = 60 * mark_speed; break;
+                  case AT_BITMAP: action.target.feed_rate = 60 * bitmap_speed; break;
+                  case AT_MOVE_ENDSTOP: break;
+                  case AT_WAIT: break;
                 }
-                if ( actiontype == AT_BITMAP )
+                
+                if ( action.ActionType == AT_BITMAP )
                 {
                   while ( queue() );// printf("-"); // wait for queue to empty
                   plan_set_accel(cfg->xaccel);
-                }
-                int dummy1, dummy2, plannedz;
-                getPlannedPositionRelativeToOrigin(&dummy1, &dummy2, &plannedz); // get the planned z coordinatre
-                moveToRelativeToOriginWithAbsoluteFeedrate(commandx, commandy, plannedz, feedrate, power, actiontype);
-  #ifdef READ_FILE_DEBUG_VERBOSE
-    printf("moveto (%d, %d, feedrate: %d, power: %d)\n",commandx, commandy,feedrate,power);
-#endif
-                if ( actiontype == AT_BITMAP )
-                {
-                  while ( queue() );// printf("-"); // wait for queue to empty
+                  plan_buffer_line(&action);
+                  UpdatePlannedCoordinates(&action);
+                  while ( queue() ); // printf("*"); // wait for queue to empty
                   plan_set_accel(cfg->accel);
                 }
+                else
+                  plan_buffer_line(&action);
+                  UpdatePlannedCoordinates(&action);
                 break;
             }
             break;
@@ -280,12 +284,13 @@ void LaosMotion::write(int i)
             switch(step)
             {
               case 1:
-                commandz = i;
                 step = 0;
-                int plannedx, plannedy, dummy1;
-                getPlannedPositionRelativeToOrigin(&plannedx, &plannedy, &dummy1);
-                int feedrate = 60.0 * cfg->speed;
-                moveToRelativeToOriginWithAbsoluteFeedrate(plannedx, plannedy, commandz, feedrate, power, AT_MOVE);
+                z = action.target.z;
+                action.param = power;
+                action.ActionType =  AT_MOVE;
+                action.target.feed_rate =  60.0 * cfg->speed;
+                plan_buffer_line(&action);
+                UpdatePlannedCoordinates(&action);
                 break;
             }
             break;
@@ -293,14 +298,14 @@ void LaosMotion::write(int i)
             switch ( step )
             {
               case 1:
-                commandx = i;
+                x = i;
                 break;
               case 2:
-                commandy = i;
+                y = i;
                 break;
               case 3:
-                commandz = i;
-                setPositionRelativeToOrigin(commandx, commandy, commandz);
+                z = i;
+                setPositionRelativeToOrigin(x,y,z);
                 step=0;
                 break;
             }
@@ -323,6 +328,7 @@ void LaosMotion::write(int i)
                     if ( val < 1 ) val = 1;
                     if ( val > 9999 ) val = 10000;
                     mark_speed = val * cfg->speed / 10000;
+                    bitmap_speed = val * cfg->xspeed / 10000;
                     #ifdef READ_FILE_DEBUG
                       printf("> speed: %i\n",mark_speed);
                     #endif  
@@ -357,8 +363,8 @@ void LaosMotion::write(int i)
             else if ( step > 2 )// copy data
             {
               bitmap[ (step-3) % BITMAP_SIZE ] = i;
-        // printf("[%ld] = %ld\n", (step-3) % BITMAP_SIZE, i);
-        if ( step-2 == bitmap_size ) // last dword received
+              // printf("[%ld] = %ld\n", (step-3) % BITMAP_SIZE, i);
+              if ( step-2 == bitmap_size ) // last dword received
               {
                 bitmap[ (step-2) % BITMAP_SIZE ] = 0;
                 step = 0;
@@ -371,7 +377,7 @@ void LaosMotion::write(int i)
             break;
     }
     if ( step )
-    step++;
+      step++;
   }
 }
 
@@ -383,7 +389,6 @@ bool LaosMotion::isStart()
 {
   return cover;
 }
-
 
 /**
 *** Hard set the position
@@ -483,9 +488,9 @@ void LaosMotion::MakeCurrentPositionOrigin()
 }
 
 
+
 /**
 *** Home the axis, stop when both home switches are pressed
-*** Resets the origin
 **/
 void LaosMotion::home(int x, int y, int z)
 {
