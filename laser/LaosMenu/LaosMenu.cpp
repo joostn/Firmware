@@ -226,13 +226,12 @@ void LaosMenu::Handle() {
         c = 0;                 // cancel the keypress
     if ( waitup && !timeout ) waitup=0;
     
-    if ( !timeout )  // increase speed if we keep button pressed longer
+    if ( !timeout )
+    {
+        // keyboard timeout (i.e. all keys are released):
+        // reset jog/focus speed:
         speed = 3;
-    else {
-        speed = speed * 2;
-        if ( speed >= 100 ) speed = 100;
     }
-
 
     if( (c != 0) || (timeout == 0))
     {
@@ -319,10 +318,36 @@ void LaosMenu::Handle() {
                     printf("Move: c: %d, numinqueue: %d, xt: %d, yt: %d,  waitempty: %d\n", 
                         c, numinqueue, xt, yt, m_MoveWaitTillQueueEmpty? 1:0);
                     int maxinqueue=m_MoveWaitTillQueueEmpty? 1:5;
+
+                    /* 
+                       Currently (Jan 2015) an old version of grbl is used in Laos. This version is buggy
+                       in the sense that there is no proper synchronization between the stepper interrupt and the
+                       main thread. When adding a new move to the queue through plan_buffer_line(), planner_recalculate()
+                       is called. This updates the acceleration profile of existing moves in the queue,
+                       potentially including the move which is currently being executed by the stepper interrupt.
+                       Due to the lack of synchronization this will lead to problems, including potential crashes or
+                       hanging. This problem in particular manifests itself during jogging, because the queue is nearly
+                       emtpy and there's a big chance the frontmost item in the stepper queue will be updated.
+                       During regular laser cutting the problem is less likely to occur since the queue will continuously
+                       be kept nearly full. Recalculation will only affect some of the last moves in the queue.
+
+                       The real fix for this bug would be to update grbl to the latest version, this seems to include
+                       proper synchronization. For now we work around the problem by wating for the queue to empty
+                       before adding new jog moves. This results in sloppy jogging (continuous stops & moves) but at
+                       least it doesn't crash the machine.
+                       -joostn
+                    */
+
+                    // always wait till queue is emptied:
+                    // just remove this line if grbl ever gets updated:
+                    maxinqueue=1;
+
                     if  ((numinqueue < maxinqueue) && ( (x!=xt) || (y != yt) )) {
                         m_MoveWaitTillQueueEmpty=false;
-                        mot->moveToRelativeToOrigin(x, y, z, speed/2);
+                        mot->moveToRelativeToOrigin(x, y, z, speed);
                         printf("Move: %d %d %d %d\n", x,y,z, speed);
+                        speed=speed*3;
+                        if(speed > 100) speed=100;
                     } else {
                         // if (! mot->ready()) 
                         // printf("Buffer vol\n");
@@ -350,10 +375,13 @@ void LaosMenu::Handle() {
                         case 0: break;
                         default: screen=MAIN; waitup=1; break;
                     }
-                    if ( mot->ready() && (z!=zt) ) 
+                    int numinqueue=mot->queue();
+                    if ( mot->ready() && (z!=zt) && (numinqueue == 0) ) 
                     {
                       mot->moveToRelativeToOrigin(x, y, z, speed);
-                      printf("Move: %d %d %d %d\n", x,y,z, speed);
+                      printf("Focus: %d %d %d %d\n", x,y,z, speed);
+                        speed=speed*3;
+                        if(speed > 100) speed=100;
                     }
                     args[0]=z;
                 }
