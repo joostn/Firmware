@@ -22,6 +22,7 @@
  */
 #include "LaosMenu.h"
 #include "stepper.h"
+#include "pins.h"
 
 static const char *menus[] = {
     "STARTUP",     //0
@@ -36,6 +37,7 @@ static const char *menus[] = {
     "REMOVE ALL JOBS", //9
     "IP",          //10
     "REBOOT", //11
+    "LASER TEST", //12
     // "POWER / SPEED",//12
     // "IO", //13
 };
@@ -91,7 +93,11 @@ static const char *screens[] = {
     "REBOOTING...    "
     "Please wait...  ",
 
-#define POWER (REBOOT+1)
+#define LASERTEST (REBOOT+1)
+    "LASER TEST:     "
+    "210ms 210%      ",
+
+#define POWER (LASERTEST+1)
     "$$$$$$$: 6543210"
     "      [ok]      ",
 
@@ -155,6 +161,8 @@ LaosMenu::LaosMenu(LaosDisplay *display) {
     dsp->cls();
     SetScreen("");
     runfile = NULL;
+    m_LaserTestPower=0;
+    m_LaserTestTime=0;
 }
 
 /**
@@ -633,6 +641,83 @@ void LaosMenu::Handle() {
                     break;
                 }
                 break;
+
+            case LASERTEST: 
+                enable = !cfg->enable;
+                switch ( c ) {
+                    case K_OK: 
+                        waitup = 1;
+                        if(m_LaserTestTime > 0)
+                        {
+                            double p = (double)(cfg->pwmmin/100.0 + ((m_LaserTestPower/100.0)*((cfg->pwmmax - cfg->pwmmin)/100.0)));
+                            pwm = p;
+                            *laser = LASERON;
+                            wait_ms(m_LaserTestTime);
+                            *laser = LASEROFF;
+                            pwm = cfg->pwmmax / 100.0;  // set pwm to max;
+                        }
+                        break; 
+                    case K_UP: case K_FUP:
+                        if(m_LaserTestPower <= 3)
+                        {
+                            m_LaserTestPower++;
+                        }
+                        else
+                        {
+                            m_LaserTestPower += (m_LaserTestPower>>1);
+                            if(m_LaserTestPower > 100) m_LaserTestPower=100;
+                        }
+                        break;
+                    case K_DOWN: case K_FDOWN: 
+                        if(m_LaserTestPower <= 4)
+                        {
+                            m_LaserTestPower--;
+                            if(m_LaserTestPower < 0) m_LaserTestPower=0;
+                        }
+                        else
+                        {
+                            m_LaserTestPower -= (m_LaserTestPower>>2);
+                        }
+                        break;
+                    case K_RIGHT:
+                        if(m_LaserTestTime <= 3)
+                        {
+                            m_LaserTestTime++;
+                        }
+                        else
+                        {
+                            m_LaserTestTime += (m_LaserTestTime>>1);
+                            if(m_LaserTestTime > 250) m_LaserTestTime=250;
+                        }
+                        break;
+                    case K_LEFT: 
+                        if(m_LaserTestTime <= 4)
+                        {
+                            m_LaserTestTime--;
+                            if(m_LaserTestTime < 0) m_LaserTestTime=0;
+                        }
+                        else
+                        {
+                            m_LaserTestTime -= (m_LaserTestTime>>2);
+                        }
+                        break;
+                    case K_CANCEL: 
+                        {
+                            enable = cfg->enable;
+                            // home the machine:
+                            while ( !mot->isStart() );
+                            mot->home(cfg->xhome,cfg->yhome,cfg->zhome);
+                            screen=MAIN;
+                            m_LaserTestPower=0;
+                            m_LaserTestTime=0;
+                            waitup = 1;
+                        }
+                        break;
+                }
+                args[0]=m_LaserTestTime;
+                args[1]=m_LaserTestPower;
+                break;
+                
 
             default:
                 screen = MAIN;

@@ -87,6 +87,8 @@ private:
   int m_SubStage;
   int m_PrevKey;
   bool m_MoveWaitTillQueueEmpty;
+  int m_LaserTestPower; // in percent
+  int m_LaserTestTime; // in ms
 };
 
  
